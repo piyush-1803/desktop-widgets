@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, os, sys, time, threading, urllib.request
+import json, os, sys, time, threading, urllib.request, urllib.parse
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
@@ -50,7 +50,6 @@ WTTR = {
 def wmo_info(code):
     return WTTR.get(int(code), ("🌡","Unknown"))
 
-# ── Dynamic theme engine ──────────────────────────────────────────────────────
 def get_theme(code, temp):
     hour    = datetime.now().hour
     is_night = hour >= 20 or hour < 6
@@ -59,13 +58,11 @@ def get_theme(code, temp):
     month   = datetime.now().month
     c       = int(code)
 
-    # Season
     if month in (12, 1, 2):   season = "winter"
     elif month in (3, 4, 5):  season = "spring"
     elif month in (6, 7, 8):  season = "summer"
     else:                      season = "autumn"
 
-    # Night override
     if is_night:
         if c in (113,):
             return {"top":"#0A0E1A","bot":"#1A2340","text":"#E8F4FF",
@@ -75,20 +72,17 @@ def get_theme(code, temp):
                    "sub":"#6A8AAA","card":"#1A2A3A","accent":"#3A70A9",
                    "label":"Night","emoji":"🌙"}
 
-    # Dawn
     if is_dawn:
         return    {"top":"#1A0A2E","bot":"#E05A20","text":"#FFE0C0",
                    "sub":"#FFAA80","card":"#1E2A3A","accent":"#FF7A30",
                    "label":"Dawn","emoji":"🌅"}
 
-    # Dusk
     if is_dusk:
         return    {"top":"#1A0E3A","bot":"#C04818","text":"#FFD0A0",
                    "sub":"#FF9060","card":"#1E2A3A","accent":"#E06828",
                    "label":"Dusk","emoji":"🌇"}
 
-    # Weather-based day themes
-    if c == 113:  # clear
+    if c == 113:
         if season == "summer":
             return {"top":"#0078D4","bot":"#38B0FF","text":"#FFFFFF",
                     "sub":"#CCEEFF","card":"#1E3A5A","accent":"#FFD700",
@@ -105,37 +99,37 @@ def get_theme(code, temp):
                    "sub":"#BBDDFF","card":"#1A3A6A","accent":"#FFD700",
                    "label":"Clear","emoji":"☀️"}
 
-    if c <= 116:  # partly cloudy
+    if c <= 116:
         return    {"top":"#1A5A9A","bot":"#4A90D4","text":"#FFFFFF",
                    "sub":"#CCE0FF","card":"#1E2A3A","accent":"#FFE080",
                    "label":"Partly Cloudy","emoji":"⛅"}
 
-    if c <= 122:  # overcast
+    if c <= 122:
         return    {"top":"#3A4A5A","bot":"#6A7A8A","text":"#EEEEFF",
                    "sub":"#AABBCC","card":"#2A3A4A","accent":"#AABBCC",
                    "label":"Overcast","emoji":"☁️"}
 
-    if c in (248,260,143):  # fog
+    if c in (248,260,143):
         return    {"top":"#4A5A6A","bot":"#8A9AAA","text":"#F0F8FF",
                    "sub":"#BBCCDD","card":"#2A3A4A","accent":"#CCDDEE",
                    "label":"Foggy","emoji":"🌫"}
 
-    if c in (263,266,293,296):  # drizzle/light rain
+    if c in (263,266,293,296):
         return    {"top":"#1A3060","bot":"#3A6090","text":"#E0F0FF",
                    "sub":"#88AACC","card":"#2A3A4A","accent":"#88BBEE",
                    "label":"Drizzle","emoji":"🌦"}
 
-    if c in (299,302,305,308,353,356,359):  # rain
+    if c in (299,302,305,308,353,356,359):
         return    {"top":"#0D1E3A","bot":"#1A3A5A","text":"#D0E8FF",
                    "sub":"#6699BB","card":"#1A2A3A","accent":"#4A80B0",
                    "label":"Rainy","emoji":"🌧"}
 
-    if c >= 386:  # thunder
+    if c >= 386:
         return    {"top":"#0A0A1A","bot":"#1A1A3A","text":"#D0D8FF",
                    "sub":"#6060AA","card":"#181828","accent":"#8080FF",
                    "label":"Thunderstorm","emoji":"⛈"}
 
-    if c >= 320:  # snow
+    if c >= 320:
         return    {"top":"#2A3A5A","bot":"#6A8AAA","text":"#FFFFFF",
                    "sub":"#CCDEFF","card":"#1E2A3A","accent":"#AADDFF",
                    "label":"Snowing","emoji":"❄️"}
@@ -144,7 +138,6 @@ def get_theme(code, temp):
                    "sub":"#BBDDFF","card":"#1A3A6A","accent":"#FFD700",
                    "label":"","emoji":"🌡"}
 
-# ── Win32 ─────────────────────────────────────────────────────────────────────
 def find_workerw():
     progman = win32gui.FindWindow("Progman", None)
     win32gui.SendMessageTimeout(progman, 0x052C, 0, 0, win32con.SMTO_NORMAL, 1000)
@@ -174,12 +167,16 @@ def embed(hwnd, ww, x, y, w, h):
 
 def fetch_weather(city):
     try:
-        url = f"https://wttr.in/{urllib.request.quote(city)}?format=j1"
+        # FIXED: use urllib.parse.quote instead of urllib.request.quote
+        url = f"https://wttr.in/{urllib.parse.quote(city)}?format=j1"
         req = urllib.request.Request(url, headers={"User-Agent":"curl/7.68.0"})
-        with urllib.request.urlopen(req, timeout=8) as r:
+        # FIXED: increased timeout from 8 to 15 for slower connections
+        with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read())
-        cur      = data["current_condition"][0]
-        days_raw = data["weather"]
+        # Handle both response formats: with or without "data" wrapper
+        root     = data.get("data", data)
+        cur      = root["current_condition"][0]
+        days_raw = root["weather"]
         days     = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
         forecast = []
         for day in days_raw[:5]:
@@ -204,7 +201,6 @@ def fetch_weather(city):
     except Exception as e:
         return {"error": str(e)}
 
-# ── Gradient helper ───────────────────────────────────────────────────────────
 def lerp_color(c1, c2, t):
     r1,g1,b1 = int(c1[1:3],16),int(c1[3:5],16),int(c1[5:7],16)
     r2,g2,b2 = int(c2[1:3],16),int(c2[3:5],16),int(c2[5:7],16)
@@ -213,7 +209,6 @@ def lerp_color(c1, c2, t):
     b = int(b1+(b2-b1)*t)
     return f"#{r:02x}{g:02x}{b:02x}"
 
-# ── City Dialog ───────────────────────────────────────────────────────────────
 class CityDialog(tk.Toplevel):
     def __init__(self, parent, current=""):
         super().__init__(parent)
@@ -227,16 +222,16 @@ class CityDialog(tk.Toplevel):
         inn.pack(fill="both", expand=True, padx=1, pady=1)
         hdr = tk.Frame(inn, bg="#161B22", height=46)
         hdr.pack(fill="x"); hdr.pack_propagate(False)
-        tk.Label(hdr, text="📍  Set Your City", fg="#FFFFFF", bg="#161B22",
+        tk.Label(hdr, text="📌  Set Your City", fg="#FFFFFF", bg="#161B22",
                  font=("Segoe UI Semibold",12,"bold")).place(x=14,rely=0.5,anchor="w")
-        tk.Button(hdr, text="✕", fg="#666666", bg="#161B22", relief="flat",
+        tk.Button(hdr, text="✖", fg="#666666", bg="#161B22", relief="flat",
                   cursor="hand2", command=self.destroy,
                   activebackground="#161B22").place(relx=1.0,x=-12,rely=0.5,anchor="e")
         hdr.bind("<ButtonPress-1>", lambda e: setattr(self,"_dx",e.x) or setattr(self,"_dy",e.y))
         hdr.bind("<B1-Motion>", lambda e: self.geometry(
             f"+{self.winfo_x()+e.x-self._dx}+{self.winfo_y()+e.y-self._dy}"))
         body = tk.Frame(inn, bg="#0D1117"); body.pack(padx=18,pady=14,fill="x")
-        tk.Label(body, text="Enter your city  (e.g. Jamshedpur, Delhi, Mumbai)",
+        tk.Label(body, text="Enter your city  (e.g. Ranchi, Delhi, Mumbai)",
                  fg="#8B949E", bg="#0D1117", font=("Segoe UI",9),
                  wraplength=240).pack(anchor="w",pady=(0,6))
         self._var = tk.StringVar(value=current)
@@ -255,7 +250,6 @@ class CityDialog(tk.Toplevel):
     def _save(self): self.result=self._var.get().strip(); self.destroy()
     def ask(self): self.grab_set(); self.wait_window(); return self.result
 
-# ── Main Widget ───────────────────────────────────────────────────────────────
 class WeatherWidget:
     def __init__(self):
         self.data  = None
@@ -282,7 +276,6 @@ class WeatherWidget:
             threading.Thread(target=self._bg_fetch, daemon=True).start()
         else:
             self.root.after(300, self._ask_city)
-        # Refresh theme every minute (for night/dawn/dusk transitions)
         self._schedule_theme_refresh()
         self.root.mainloop()
 
@@ -298,14 +291,12 @@ class WeatherWidget:
         self.root.after(600_000, lambda: threading.Thread(
             target=self._bg_fetch, daemon=True).start())
 
-    # ── drawing helpers ───────────────────────────────────────────────────────
     def _rrect(self, x1, y1, x2, y2, r=20, **kw):
         pts=[x1+r,y1,x2-r,y1,x2,y1,x2,y1+r,x2,y2-r,x2,y2,
              x2-r,y2,x1+r,y2,x1,y2,x1,y2-r,x1,y1+r,x1,y1]
         self.cv.create_polygon(pts, smooth=True, **kw)
 
     def _gradient(self, c1, c2, x0, y0, x1, y1, steps=40):
-        """Vertical gradient inside a rect using horizontal lines."""
         for i in range(steps):
             t   = i / steps
             col = lerp_color(c1, c2, t)
@@ -319,7 +310,7 @@ class WeatherWidget:
         cv.create_text(W//2,H//2-14,text="⛅",font=("Segoe UI",30))
         cv.create_text(W//2,H//2+18,text="Loading weather…",
                        fill="#CCEEFF",font=("Segoe UI",10))
-        cv.create_text(W-16,18,text="✕",fill="#AAAACC",
+        cv.create_text(W-16,18,text="✖",fill="#AAAACC",
                        font=("Segoe UI",10),tags="close")
         cv.tag_bind("close","<Button-1>",lambda e:self._quit())
 
@@ -333,9 +324,9 @@ class WeatherWidget:
                            fill="#EE8888",font=("Segoe UI",10))
             cv.create_text(W//2,H//2+30,text=str(self.data["error"])[:36],
                            fill="#885555",font=("Segoe UI",8))
-            cv.create_text(W//2,H//2+52,text="📍 Click to change city",
+            cv.create_text(W//2,H//2+52,text="📌 Click to change city",
                            fill="#5599FF",font=("Segoe UI",9),tags="change")
-            cv.create_text(W-16,18,text="✕",fill="#AAAACC",
+            cv.create_text(W-16,18,text="✖",fill="#AAAACC",
                            font=("Segoe UI",10),tags="close")
             cv.tag_bind("change","<Button-1>",lambda e:self._ask_city())
             cv.tag_bind("close","<Button-1>",lambda e:self._quit())
@@ -345,44 +336,33 @@ class WeatherWidget:
         th = get_theme(d["code"], d["temp"])
         cv = self.cv; cv.delete("all")
 
-        # ── gradient background ──
         self._gradient(th["top"], th["bot"], 6, 6, W-6, H-6, steps=H-12)
         self._rrect(5,5,W-5,H-5,r=22,fill="",outline=th["top"],width=1)
 
-        # ── LEFT: big temp + condition ──
-        # Emoji background glow circle
         cv.create_oval(16, 30, 92, 106,
                        fill=th["card"] if th["card"] != "#334455" else "#445566",
                        outline="#AAAACC", width=1)
-        # Large emoji with shadow trick (draw twice offset)
         cv.create_text(56, 70, text=wmo_info(d["code"])[0],
                        font=("Segoe UI",42))
 
-        # Temperature
         cv.create_text(54, 130, text=f"{d['temp']}°",
                        fill=th["text"], font=("Segoe UI Semibold",32,"bold"))
 
-        # Condition label
         desc = d.get("desc","")[:14]
         cv.create_text(54, 155, text=desc,
                        fill=th["sub"], font=("Segoe UI",9))
 
-        # ── DIVIDER ──
         cv.create_line(118, 20, 118, H-20, fill=th["sub"], width=1)
 
-        # ── RIGHT: city, forecast ──
-        # City name
         city_disp = d["city"][:18]
         cv.create_text(W//2+60, 22, text=city_disp,
                        fill=th["text"], font=("Segoe UI Semibold",11,"bold"),
                        anchor="center")
 
-        # Date
         date_str = datetime.now().strftime("%A, %b %d")
         cv.create_text(W//2+60, 38, text=date_str,
                        fill=th["sub"], font=("Segoe UI",8), anchor="center")
 
-        # ── Mini forecast row ──
         fc_y  = 62
         fc_x0 = 128
         cw    = (W - fc_x0 - 10) // 5
@@ -390,22 +370,16 @@ class WeatherWidget:
         for i, day in enumerate(d["forecast"][:5]):
             x    = fc_x0 + cw*i + cw//2
             di,_ = wmo_info(day["code"])
-
-            # Day label
             label = "Now" if i==0 else day["day"]
             cv.create_text(x, fc_y,    text=label,
                            fill=th["sub"] if i>0 else th["text"],
                            font=("Segoe UI",7,"bold" if i==0 else "normal"))
-            # Emoji
             cv.create_text(x, fc_y+16, text=di, font=("Segoe UI",13))
-            # Hi temp
             cv.create_text(x, fc_y+34, text=f"{day['hi']}°",
                            fill=th["text"], font=("Segoe UI Semibold",9,"bold"))
-            # Lo temp
             cv.create_text(x, fc_y+47, text=f"{day['lo']}°",
                            fill=th["sub"], font=("Segoe UI",8))
 
-        # ── Bottom stats strip ──
         strip_y = H - 36
         cv.create_line(128, strip_y-4, W-8, strip_y-4,
                        fill=th["sub"], width=1)
@@ -421,13 +395,11 @@ class WeatherWidget:
             cv.create_text(x, strip_y+2,  text=f"{icon} {val}",
                            fill=th["sub"], font=("Segoe UI",8))
 
-        # ── Controls ──
-        cv.create_text(W-14, 14, text="✕", fill=th["sub"],
+        cv.create_text(W-14, 14, text="✖", fill=th["sub"],
                        font=("Segoe UI",9), tags="close")
         cv.create_text(W-30, 14, text="✎", fill=th["sub"],
                        font=("Segoe UI",9), tags="change")
 
-        # Updated
         cv.create_text(8, H-6, text=f"↻ {d['updated']}",
                        fill=th["sub"], font=("Segoe UI",7), anchor="w")
 
@@ -445,34 +417,6 @@ class WeatherWidget:
             self.data = None
             self._draw_loading()
             threading.Thread(target=self._bg_fetch, daemon=True).start()
-
-    def _open_settings(self):
-        s = BASE_DIR / "settings.exe"
-        if s.exists():
-            subprocess.Popen([str(s)], cwd=str(BASE_DIR))
-        else:
-            import subprocess as sp
-            sp.Popen([sys.executable, str(BASE_DIR / "settings.py")],
-                     cwd=str(BASE_DIR))
-
-    def _open_settings(self):
-        s = BASE_DIR / "settings.exe"
-        if s.exists():
-            subprocess.Popen([str(s)], cwd=str(BASE_DIR))
-        else:
-            s2 = BASE_DIR / "settings.py"
-            if s2.exists():
-                subprocess.Popen([sys.executable, str(s2)], cwd=str(BASE_DIR))
-
-    def _open_settings(self):
-        s = BASE_DIR / "settings.exe"
-        if s.exists():
-            subprocess.Popen([str(s)], cwd=str(BASE_DIR))
-        else:
-            s2 = BASE_DIR / "settings.py"
-            if s2.exists():
-                import sys as _sys
-                subprocess.Popen([_sys.executable, str(s2)], cwd=str(BASE_DIR))
 
     def _quit(self):
         try: PID_PATH.unlink(missing_ok=True)
