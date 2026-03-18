@@ -1,0 +1,9 @@
+build_tmp/  
+dist/  
+__pycache__/  
+*.exe  
+*.pid  
+*.log  
+*.zip  
+*.pyc  
+*.spec 
